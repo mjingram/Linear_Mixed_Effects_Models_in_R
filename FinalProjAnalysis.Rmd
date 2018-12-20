@@ -1,0 +1,141 @@
+---
+title: "FinalProjectAnalysis"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, results='hide'}
+library(lme4)
+## Load Data and EDA/Check Assumptions
+sleepDat<-sleepstudy
+hist(sleepDat$Reaction)
+hist(sleepDat$Days)
+
+sleepMod1<-lm(Reaction~Days + Subject, sleepDat)
+par(mfrow=c(2,2))
+plot(sleepMod1)
+
+library(gvlma)
+gvlma(sleepMod1)
+library(car)
+influenceIndexPlot(sleepMod1)
+vif(sleepMod1)
+
+par(mfrow=c(1,1))
+
+library(ggplot2)
+ggplot(sleepDat, aes(x = Days, y = Reaction, colour = Subject)) +
+  geom_point(size = 2) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+## Possible Influence/outliers, independence assumption is violated, homoscedasity may be violated. Going to try linear mixed effects models to see if they will fix the assumptions.
+```
+
+```{r, results='hide'}
+DayCol<-sleepDat$Days
+ReactCol<-sleepDat$Reaction
+plot(DayCol, ReactCol)
+## Now build linear mixed effects models
+## Random Intercept first
+sleepMod2<-lmer(Reaction ~ Days + (1|Subject), sleepDat)
+summary(sleepMod2)
+coef(sleepMod2)
+
+
+## Random Slope Model
+sleepMod3<-lmer(Reaction ~ Days + (Days|Subject), sleepDat)
+summary(sleepMod3)
+coef(sleepMod3)
+
+
+
+## Plotting Mixed Effects Models
+## Random Intercept Model
+fixParam<-fixef(sleepMod2)
+
+randParamVector<-coef(sleepMod2)[["Subject"]][["(Intercept)"]]
+SubjectVector<-levels(sleepDat$Subject)
+
+plot(Reaction~Days,data=sleepDat,ylab="Reaction Time",xlab="Days", ylim=c(100, 500), main="Random Intercept Model of Reaction Time vs. Days \nby Subject")
+subNum<-unique(sleepDat$Subject)
+for(i in 1:18){
+abline(a=randParamVector[i], b=fixParam[2],col=(20+i),lty=2,lwd=2)
+
+}
+abline(fixParam,lwd=6,col="red")
+legend("bottomright", legend=SubjectVector,
+       col=21:38, lty=2, cex=0.375, horiz=TRUE)
+
+
+## Random Slope Model
+fixParam<-fixef(sleepMod3)
+
+randParamVector<-coef(sleepMod3)[["Subject"]][["(Intercept)"]]
+fixParamVector<-coef(sleepMod3)[["Subject"]][["Days"]]
+
+plot(Reaction~Days,data=sleepDat,ylab="Reaction Time",xlab="Days", ylim=c(100, 500), main="Random Slope and Intercept Model of Reaction Time vs. Days \nby Subject")
+subNum<-unique(sleepDat$Subject)
+for(i in 1:18){
+abline(a=randParamVector[i],b=fixParamVector[i], col=(20+i), lty=2, lwd=2)
+
+}
+abline(fixParam,lwd=6,col="red")
+legend("bottomright", legend=SubjectVector,
+       col=21:38, lty=2, cex=0.375, horiz=TRUE)
+
+
+## Likelihood Ratio Test
+##Random Intercept Model Fixed Effect Significance
+sleepMod2<-lmer(Reaction ~ Days + (1|Subject), sleepDat, REML = FALSE)
+sleepMod2.Null<-lmer(Reaction ~ 1 + (1|Subject),sleepDat,REML = FALSE)
+
+anova(sleepMod2.Null, sleepMod2)
+## Chi-Sq:116.46, Df=1, p-value:2.2e-16
+## Days is significant for the model
+
+## Likelihood Ratio Test
+## Fixed Effect Model Random effect Significance
+sleepMod2<-lmer(Reaction ~ Days + (1|Subject), sleepDat)
+library(RLRsim)
+exactRLRT(sleepMod2)
+
+## P-Value <2.2e-16 is evidence the random effect is non zero
+
+## Likelihood Ratio Test
+## Random Slope Model
+sleepMod3<-lmer(Reaction ~ Days + (Days|Subject), sleepDat, REML = FALSE)
+sleepMod3.Null<-lmer(Reaction~1 + (Days|Subject), sleepDat, REML=FALSE)
+sleepMod3.RanNull<-lm(Reaction~Days, sleepDat)
+
+anova(sleepMod3.Null, sleepMod3)
+## Chi-Square: 23.537, Df=1, P-Value:1.226e-06
+## Days is significant in the model
+
+## Restricted Likelihood Ratio Test
+## Random Slope Effect test for significance
+
+sleepMod2<-lmer(Reaction ~ Days + (1|Subject), sleepDat)
+mA <- update(sleepMod2, .~. + (0 + Days|Subject))
+mSlope <- update(mA, .~. - (1|Subject))
+exactRLRT(mSlope, mA, m0=sleepMod2)
+
+
+
+## Checking assumptions
+plot(sleepMod1)
+library(car)
+influenceIndexPlot(sleepMod1)
+
+plot(sleepMod2)
+qqnorm(resid(sleepMod2))
+qqline(resid(sleepMod2))
+
+plot(sleepMod3)
+qqnorm(resid(sleepMod3))
+qqline(resid(sleepMod3))
+
